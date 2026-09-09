@@ -70,9 +70,10 @@ fn run(
                         match network::fetch(&url) {
                             Ok(body) => {
                                 let page = html::parse(&body);
+                                content = html::render_text(&page);
                                 title = page.title;
-                                content = page.text;
                             }
+
                             Err(error) => {
                                 title = "Error".to_string();
                                 content = format!("Failed to load {url}\n\n{error}");
