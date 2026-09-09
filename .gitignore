@@ -1,55 +1,24 @@
-# Prerequisites
-*.d
+# Rust build artifacts
+/target/
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+# Rust tooling
+**/*.rs.bk
+Cargo.lock
 
-# Linker output
-*.ilk
-*.map
-*.exp
+# IDE / editors
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Precompiled Headers
-*.gch
-*.pch
+# OS files
+.DS_Store
+Thumbs.db
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
+# Environment / secrets
+.env
+.env.*
+!.env.example
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# debug information files
-*.dwo
+# Logs
+*.log
