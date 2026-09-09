@@ -9,11 +9,10 @@ use ratatui::{
 use crate::html::{InlineElement, Page, PageElement};
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, page: &Page, scroll: u16) {
-    let mut lines = Vec::new();
+    let lines = build_lines(page);
+    let max_scroll = calculate_max_scroll(lines.len(), area);
 
-    for element in &page.elements {
-        render_element(element, &mut lines);
-    }
+    let scroll = scroll.min(max_scroll);
 
     let text = Text::from(lines);
 
@@ -27,6 +26,31 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, page: &Page, scroll: u16) {
         .scroll((scroll, 0));
 
     frame.render_widget(widget, area);
+}
+
+pub fn max_scroll(page: &Page, area: Rect) -> u16 {
+    let lines = build_lines(page);
+    calculate_max_scroll(lines.len(), area)
+}
+
+fn calculate_max_scroll(line_count: usize, area: Rect) -> u16 {
+    let content_height = area.height.saturating_sub(2) as usize;
+
+    if content_height == 0 || line_count <= content_height {
+        0
+    } else {
+        (line_count - content_height).min(u16::MAX as usize) as u16
+    }
+}
+
+fn build_lines(page: &Page) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+
+    for element in &page.elements {
+        render_element(element, &mut lines);
+    }
+
+    lines
 }
 
 fn render_element(element: &PageElement, lines: &mut Vec<Line<'static>>) {

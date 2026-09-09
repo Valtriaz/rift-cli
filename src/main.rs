@@ -52,6 +52,19 @@ fn run(
     let mut scroll: u16 = 0;
 
     loop {
+        let terminal_area = terminal.get_frame().area();
+
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(1),
+                Constraint::Length(1),
+            ])
+            .split(terminal_area);
+
+        let page_area = layout[1];
+
         if let Some(input) = input::poll()? {
             match input {
                 InputEvent::Quit => {
@@ -94,15 +107,20 @@ fn run(
                 }
 
                 InputEvent::ScrollDown => {
-                    scroll = scroll.saturating_add(1);
+                    let max_scroll = renderer::max_scroll(&page, page_area);
+                    scroll = scroll.saturating_add(1).min(max_scroll);
                 }
 
                 InputEvent::PageUp => {
-                    scroll = scroll.saturating_sub(10);
+                    scroll = scroll.saturating_sub(page_area.height.saturating_sub(2));
                 }
 
                 InputEvent::PageDown => {
-                    scroll = scroll.saturating_add(10);
+                    let max_scroll = renderer::max_scroll(&page, page_area);
+
+                    scroll = scroll
+                        .saturating_add(page_area.height.saturating_sub(2))
+                        .min(max_scroll);
                 }
 
                 InputEvent::Home => {
@@ -110,7 +128,7 @@ fn run(
                 }
 
                 InputEvent::End => {
-                    scroll = u16::MAX;
+                    scroll = renderer::max_scroll(&page, page_area);
                 }
 
                 InputEvent::Escape => {}
