@@ -3,7 +3,6 @@
 
 # Rust tooling
 **/*.rs.bk
-Cargo.lock
 
 # IDE / editors
 .vscode/
