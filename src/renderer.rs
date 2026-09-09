@@ -10,7 +10,7 @@ use crate::html::{InlineElement, Page, PageElement};
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, page: &Page, scroll: u16) {
     let lines = build_lines(page);
-    let max_scroll = calculate_max_scroll(lines.len(), area);
+    let max_scroll = max_scroll_for_lines(&lines, area);
 
     let scroll = scroll.min(max_scroll);
 
@@ -30,17 +30,41 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, page: &Page, scroll: u16) {
 
 pub fn max_scroll(page: &Page, area: Rect) -> u16 {
     let lines = build_lines(page);
-    calculate_max_scroll(lines.len(), area)
+    max_scroll_for_lines(&lines, area)
 }
 
-fn calculate_max_scroll(line_count: usize, area: Rect) -> u16 {
+fn max_scroll_for_lines(lines: &[Line<'static>], area: Rect) -> u16 {
+    let content_width = area.width.saturating_sub(2) as usize;
     let content_height = area.height.saturating_sub(2) as usize;
 
-    if content_height == 0 || line_count <= content_height {
+    if content_width == 0 || content_height == 0 {
+        return 0;
+    }
+
+    let wrapped_height = lines
+        .iter()
+        .map(|line| wrapped_line_height(line, content_width))
+        .sum::<usize>();
+
+    if wrapped_height <= content_height {
         0
     } else {
-        (line_count - content_height).min(u16::MAX as usize) as u16
+        (wrapped_height - content_height).min(u16::MAX as usize) as u16
     }
+}
+
+fn wrapped_line_height(line: &Line<'_>, width: usize) -> usize {
+    if width == 0 {
+        return 1;
+    }
+
+    let line_width = line.width();
+
+    if line_width == 0 {
+        return 1;
+    }
+
+    line_width.div_ceil(width)
 }
 
 fn build_lines(page: &Page) -> Vec<Line<'static>> {
