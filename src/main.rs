@@ -50,6 +50,7 @@ fn run(
 
     let mut error_message: Option<String> = None;
     let mut scroll: u16 = 0;
+    let mut selected_link: Option<usize> = None;
 
     loop {
         let terminal_area = terminal.get_frame().area();
@@ -73,14 +74,34 @@ fn run(
 
                 InputEvent::Character(character) => {
                     address.push(character);
+                    selected_link = None;
                 }
 
                 InputEvent::Backspace => {
                     address.pop();
+                    selected_link = None;
                 }
 
                 InputEvent::Enter => {
-                    if !address.is_empty() {
+                    if let Some(link_index) = selected_link {
+                        if let Some(url) = find_link_url(&page, link_index) {
+                            address = url.to_string();
+
+                            match network::fetch(&address) {
+                                Ok(body) => {
+                                    page = html::parse(&body);
+                                    error_message = None;
+                                    scroll = 0;
+                                    selected_link = None;
+                                }
+
+                                Err(error) => {
+                                    error_message =
+                                        Some(format!("Failed to load {address}\n\n{error}"));
+                                }
+                            }
+                        }
+                    } else if !address.is_empty() {
                         let url =
                             if address.starts_with("http://") || address.starts_with("https://") {
                                 address.clone()
@@ -93,6 +114,7 @@ fn run(
                                 page = html::parse(&body);
                                 error_message = None;
                                 scroll = 0;
+                                selected_link = None;
                             }
 
                             Err(error) => {
@@ -100,6 +122,14 @@ fn run(
                             }
                         }
                     }
+                }
+
+                InputEvent::NextLink => {
+                    selected_link = next_link(&page, selected_link);
+                }
+
+                InputEvent::PreviousLink => {
+                    selected_link = previous_link(&page, selected_link);
                 }
 
                 InputEvent::ScrollUp => {
@@ -131,7 +161,9 @@ fn run(
                     scroll = renderer::max_scroll(&page, page_area);
                 }
 
-                InputEvent::Escape => {}
+                InputEvent::Escape => {
+                    selected_link = None;
+                }
             }
         }
 
@@ -158,15 +190,131 @@ fn run(
 
                 frame.render_widget(error_widget, layout[1]);
             } else {
-                renderer::render(frame, layout[1], &page, scroll);
+                renderer::render(frame, layout[1], &page, scroll, selected_link);
             }
 
-            let status =
-                Paragraph::new("Enter: navigate    ↑↓: scroll    PgUp/PgDn: page    Ctrl+Q: quit");
+            let status = Paragraph::new(
+                "Enter: navigate    Tab/Shift+Tab: links    ↑↓: scroll    PgUp/PgDn: page    Ctrl+Q: quit",
+            );
 
             frame.render_widget(status, layout[2]);
         })?;
     }
 
     Ok(())
+}
+
+fn next_link(page: &Page, selected: Option<usize>) -> Option<usize> {
+    let links = page_links(page);
+
+    if links.is_empty() {
+        return None;
+    }
+
+    match selected {
+        None => links.first().copied(),
+        Some(current) => links
+            .iter()
+            .copied()
+            .find(|index| *index > current)
+            .or_else(|| links.first().copied()),
+    }
+}
+
+fn previous_link(page: &Page, selected: Option<usize>) -> Option<usize> {
+    let links = page_links(page);
+
+    if links.is_empty() {
+        return None;
+    }
+
+    match selected {
+        None => links.last().copied(),
+        Some(current) => links
+            .iter()
+            .copied()
+            .rev()
+            .find(|index| *index < current)
+            .or_else(|| links.last().copied()),
+    }
+}
+
+fn page_links(page: &Page) -> Vec<usize> {
+    let mut links = Vec::new();
+
+    for element in &page.elements {
+        collect_element_links(element, &mut links);
+    }
+
+    links
+}
+
+fn collect_element_links(element: &html::PageElement, links: &mut Vec<usize>) {
+    match element {
+        html::PageElement::Link { index, .. } => {
+            links.push(*index);
+        }
+
+        html::PageElement::Paragraph(elements) => {
+            collect_inline_links(elements, links);
+        }
+
+        html::PageElement::List { items, .. } => {
+            for item in items {
+                collect_inline_links(&item.elements, links);
+            }
+        }
+
+        _ => {}
+    }
+}
+
+fn collect_inline_links(elements: &[html::InlineElement], links: &mut Vec<usize>) {
+    for element in elements {
+        if let html::InlineElement::Link { index, .. } = element {
+            links.push(*index);
+        }
+    }
+}
+
+fn find_link_url(page: &Page, target_index: usize) -> Option<&str> {
+    for element in &page.elements {
+        if let Some(url) = find_element_link_url(element, target_index) {
+            return Some(url);
+        }
+    }
+
+    None
+}
+
+fn find_element_link_url(element: &html::PageElement, target_index: usize) -> Option<&str> {
+    match element {
+        html::PageElement::Link { index, url, .. } if *index == target_index => Some(url),
+
+        html::PageElement::Paragraph(elements) => find_inline_link_url(elements, target_index),
+
+        html::PageElement::List { items, .. } => {
+            for item in items {
+                if let Some(url) = find_inline_link_url(&item.elements, target_index) {
+                    return Some(url);
+                }
+            }
+
+            None
+        }
+
+        _ => None,
+    }
+}
+
+fn find_inline_link_url(elements: &[html::InlineElement], target_index: usize) -> Option<&str> {
+    for element in elements {
+        if let html::InlineElement::Link { index, url, .. } = element
+            && *index == target_index
+        {
+            return Some(url);
+        }
+    }
+
+    None
 }

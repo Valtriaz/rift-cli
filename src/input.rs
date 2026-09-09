@@ -14,6 +14,8 @@ pub enum InputEvent {
     PageDown,
     Home,
     End,
+    NextLink,
+    PreviousLink,
 }
 
 pub fn poll() -> Result<Option<InputEvent>, Box<dyn std::error::Error>> {
@@ -26,6 +28,12 @@ pub fn poll() -> Result<Option<InputEvent>, Box<dyn std::error::Error>> {
             KeyCode::Char('q') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 Ok(Some(InputEvent::Quit))
             }
+
+            KeyCode::Tab if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
+                Ok(Some(InputEvent::PreviousLink))
+            }
+
+            KeyCode::Tab => Ok(Some(InputEvent::NextLink)),
 
             KeyCode::Char(character) => Ok(Some(InputEvent::Character(character))),
 

@@ -8,10 +8,15 @@ use ratatui::{
 
 use crate::html::{InlineElement, Page, PageElement};
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, page: &Page, scroll: u16) {
-    let lines = build_lines(page);
+pub fn render(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    page: &Page,
+    scroll: u16,
+    selected_link: Option<usize>,
+) {
+    let lines = build_lines(page, selected_link);
     let max_scroll = max_scroll_for_lines(&lines, area);
-
     let scroll = scroll.min(max_scroll);
 
     let text = Text::from(lines);
@@ -29,7 +34,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, page: &Page, scroll: u16) {
 }
 
 pub fn max_scroll(page: &Page, area: Rect) -> u16 {
-    let lines = build_lines(page);
+    let lines = build_lines(page, None);
     max_scroll_for_lines(&lines, area)
 }
 
@@ -67,17 +72,21 @@ fn wrapped_line_height(line: &Line<'_>, width: usize) -> usize {
     line_width.div_ceil(width)
 }
 
-fn build_lines(page: &Page) -> Vec<Line<'static>> {
+fn build_lines(page: &Page, selected_link: Option<usize>) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     for element in &page.elements {
-        render_element(element, &mut lines);
+        render_element(element, &mut lines, selected_link);
     }
 
     lines
 }
 
-fn render_element(element: &PageElement, lines: &mut Vec<Line<'static>>) {
+fn render_element(
+    element: &PageElement,
+    lines: &mut Vec<Line<'static>>,
+    selected_link: Option<usize>,
+) {
     match element {
         PageElement::Heading { level, text } => {
             if !lines.is_empty() {
@@ -105,19 +114,12 @@ fn render_element(element: &PageElement, lines: &mut Vec<Line<'static>>) {
         }
 
         PageElement::Paragraph(elements) => {
-            lines.extend(render_inline(elements));
+            lines.extend(render_inline(elements, selected_link));
             lines.push(Line::from(""));
         }
 
         PageElement::Link { index, text, url } => {
-            lines.push(Line::from(vec![
-                Span::styled("→ ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(
-                    format!("[{index}] {text}"),
-                    Style::default().add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
-                ),
-                Span::raw(format!("  [{url}]")),
-            ]));
+            lines.push(Line::from(render_link(*index, text, url, selected_link)));
 
             lines.push(Line::from(""));
         }
@@ -130,7 +132,7 @@ fn render_element(element: &PageElement, lines: &mut Vec<Line<'static>>) {
                     "• ".to_string()
                 };
 
-                let mut item_lines = render_inline(&item.elements);
+                let mut item_lines = render_inline(&item.elements, selected_link);
 
                 if let Some(first) = item_lines.first_mut() {
                     first.spans.insert(0, Span::raw(marker));
@@ -192,11 +194,11 @@ fn render_element(element: &PageElement, lines: &mut Vec<Line<'static>>) {
     }
 }
 
-fn render_inline(elements: &[InlineElement]) -> Vec<Line<'static>> {
+fn render_inline(elements: &[InlineElement], selected_link: Option<usize>) -> Vec<Line<'static>> {
     let mut spans = Vec::new();
 
-    for (index, element) in elements.iter().enumerate() {
-        if index > 0 {
+    for (position, element) in elements.iter().enumerate() {
+        if position > 0 {
             spans.push(Span::raw(" "));
         }
 
@@ -206,12 +208,7 @@ fn render_inline(elements: &[InlineElement]) -> Vec<Line<'static>> {
             }
 
             InlineElement::Link { index, text, url } => {
-                spans.push(Span::styled(
-                    format!("[{index}] → {text}"),
-                    Style::default().add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
-                ));
-
-                spans.push(Span::raw(format!(" [{url}]")));
+                spans.extend(render_link(*index, text, url, selected_link));
             }
 
             InlineElement::Code(text) => {
@@ -224,4 +221,24 @@ fn render_inline(elements: &[InlineElement]) -> Vec<Line<'static>> {
     }
 
     vec![Line::from(spans)]
+}
+
+fn render_link(
+    index: usize,
+    text: &str,
+    url: &str,
+    selected_link: Option<usize>,
+) -> Vec<Span<'static>> {
+    let selected = selected_link == Some(index);
+
+    let style = if selected {
+        Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED | Modifier::REVERSED)
+    } else {
+        Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+    };
+
+    vec![
+        Span::styled(format!("[{index}] → {text}"), style),
+        Span::raw(format!(" [{url}]")),
+    ]
 }
