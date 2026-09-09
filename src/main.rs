@@ -1,3 +1,4 @@
+mod html;
 mod input;
 mod network;
 
@@ -39,7 +40,8 @@ fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut address = String::new();
-    let mut content = String::from("RIFT-CLI");
+    let mut title = String::from("RIFT-CLI");
+    let mut content = String::from("Enter a URL to begin.");
 
     loop {
         if let Some(input) = input::poll()? {
@@ -65,10 +67,17 @@ fn run(
                                 format!("https://{address}")
                             };
 
-                        content = match network::fetch(&url) {
-                            Ok(body) => body,
-                            Err(error) => format!("Failed to load {url}\n\n{error}"),
-                        };
+                        match network::fetch(&url) {
+                            Ok(body) => {
+                                let page = html::parse(&body);
+                                title = page.title;
+                                content = page.text;
+                            }
+                            Err(error) => {
+                                title = "Error".to_string();
+                                content = format!("Failed to load {url}\n\n{error}");
+                            }
+                        }
                     }
                 }
 
@@ -92,7 +101,7 @@ fn run(
                 .block(Block::default().borders(Borders::ALL).title(" Address "));
 
             let page = Paragraph::new(content.as_str())
-                .block(Block::default().borders(Borders::ALL).title(" RIFT "))
+                .block(Block::default().borders(Borders::ALL).title(title.as_str()))
                 .wrap(Wrap { trim: false });
 
             let status = Paragraph::new("Enter: navigate    Ctrl+Q: quit");
