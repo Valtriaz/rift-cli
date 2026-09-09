@@ -10,6 +10,7 @@ use crossterm::{
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout},
     widgets::{Block, Borders, Paragraph},
 };
 
@@ -36,14 +37,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut address = String::new();
+
     loop {
         terminal.draw(|frame| {
             let area = frame.area();
 
-            let paragraph = Paragraph::new("RIFT-CLI")
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(1),
+                    Constraint::Length(1),
+                ])
+                .split(area);
+
+            let address_bar = Paragraph::new(address.as_str())
+                .block(Block::default().borders(Borders::ALL).title(" Address "));
+
+            let content = Paragraph::new("RIFT-CLI")
                 .block(Block::default().borders(Borders::ALL).title(" RIFT "));
 
-            frame.render_widget(paragraph, area);
+            let status = Paragraph::new("q: quit");
+
+            frame.render_widget(address_bar, layout[0]);
+            frame.render_widget(content, layout[1]);
+            frame.render_widget(status, layout[2]);
         })?;
 
         if let Some(input) = input::poll()? {
