@@ -1,4 +1,5 @@
 mod input;
+mod network;
 
 use std::io;
 
@@ -11,7 +12,7 @@ use ratatui::{
     Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 
 use input::InputEvent;
@@ -38,6 +39,7 @@ fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut address = String::new();
+    let mut content = String::from("RIFT-CLI");
 
     loop {
         if let Some(input) = input::poll()? {
@@ -54,7 +56,21 @@ fn run(
                     address.pop();
                 }
 
-                InputEvent::Enter => {}
+                InputEvent::Enter => {
+                    if !address.is_empty() {
+                        let url =
+                            if address.starts_with("http://") || address.starts_with("https://") {
+                                address.clone()
+                            } else {
+                                format!("https://{address}")
+                            };
+
+                        content = match network::fetch(&url) {
+                            Ok(body) => body,
+                            Err(error) => format!("Failed to load {url}\n\n{error}"),
+                        };
+                    }
+                }
 
                 InputEvent::Escape => {}
             }
@@ -75,13 +91,14 @@ fn run(
             let address_bar = Paragraph::new(address.as_str())
                 .block(Block::default().borders(Borders::ALL).title(" Address "));
 
-            let content = Paragraph::new("RIFT-CLI")
-                .block(Block::default().borders(Borders::ALL).title(" RIFT "));
+            let page = Paragraph::new(content.as_str())
+                .block(Block::default().borders(Borders::ALL).title(" RIFT "))
+                .wrap(Wrap { trim: false });
 
-            let status = Paragraph::new("Enter: navigate");
+            let status = Paragraph::new("Enter: navigate    Ctrl+Q: quit");
 
             frame.render_widget(address_bar, layout[0]);
-            frame.render_widget(content, layout[1]);
+            frame.render_widget(page, layout[1]);
             frame.render_widget(status, layout[2]);
         })?;
     }
