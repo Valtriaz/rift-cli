@@ -1,6 +1,7 @@
 mod html;
 mod input;
 mod network;
+mod renderer;
 
 use std::io;
 
@@ -13,9 +14,10 @@ use ratatui::{
     Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
 };
 
+use html::Page;
 use input::InputEvent;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,8 +42,12 @@ fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut address = String::new();
-    let mut title = String::from("RIFT-CLI");
-    let mut content = String::from("Enter a URL to begin.");
+    let mut page = Page {
+        title: "RIFT-CLI".to_string(),
+        elements: Vec::new(),
+    };
+    let mut error_message: Option<String> = None;
+    let mut scroll: u16 = 0;
 
     loop {
         if let Some(input) = input::poll()? {
@@ -69,14 +75,13 @@ fn run(
 
                         match network::fetch(&url) {
                             Ok(body) => {
-                                let page = html::parse(&body);
-                                content = html::render_text(&page);
-                                title = page.title;
+                                page = html::parse(&body);
+                                error_message = None;
+                                scroll = 0;
                             }
 
                             Err(error) => {
-                                title = "Error".to_string();
-                                content = format!("Failed to load {url}\n\n{error}");
+                                error_message = Some(format!("Failed to load {url}\n\n{error}"));
                             }
                         }
                     }
@@ -101,14 +106,19 @@ fn run(
             let address_bar = Paragraph::new(address.as_str())
                 .block(Block::default().borders(Borders::ALL).title(" Address "));
 
-            let page = Paragraph::new(content.as_str())
-                .block(Block::default().borders(Borders::ALL).title(title.as_str()))
-                .wrap(Wrap { trim: false });
-
-            let status = Paragraph::new("Enter: navigate    Ctrl+Q: quit");
-
             frame.render_widget(address_bar, layout[0]);
-            frame.render_widget(page, layout[1]);
+
+            if let Some(error) = &error_message {
+                let error_widget = Paragraph::new(error.as_str())
+                    .block(Block::default().borders(Borders::ALL).title(" Error "));
+
+                frame.render_widget(error_widget, layout[1]);
+            } else {
+                renderer::render(frame, layout[1], &page, scroll);
+            }
+
+            let status = Paragraph::new("Enter: navigate    ↑↓: scroll    Ctrl+Q: quit");
+
             frame.render_widget(status, layout[2]);
         })?;
     }
