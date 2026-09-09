@@ -8,6 +8,12 @@ pub enum InputEvent {
     Backspace,
     Enter,
     Escape,
+    ScrollUp,
+    ScrollDown,
+    PageUp,
+    PageDown,
+    Home,
+    End,
 }
 
 pub fn poll() -> Result<Option<InputEvent>, Box<dyn std::error::Error>> {
@@ -20,12 +26,30 @@ pub fn poll() -> Result<Option<InputEvent>, Box<dyn std::error::Error>> {
             KeyCode::Char('q') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 Ok(Some(InputEvent::Quit))
             }
+
             KeyCode::Char(character) => Ok(Some(InputEvent::Character(character))),
+
             KeyCode::Backspace => Ok(Some(InputEvent::Backspace)),
+
             KeyCode::Enter => Ok(Some(InputEvent::Enter)),
+
             KeyCode::Esc => Ok(Some(InputEvent::Escape)),
+
+            KeyCode::Up => Ok(Some(InputEvent::ScrollUp)),
+
+            KeyCode::Down => Ok(Some(InputEvent::ScrollDown)),
+
+            KeyCode::PageUp => Ok(Some(InputEvent::PageUp)),
+
+            KeyCode::PageDown => Ok(Some(InputEvent::PageDown)),
+
+            KeyCode::Home => Ok(Some(InputEvent::Home)),
+
+            KeyCode::End => Ok(Some(InputEvent::End)),
+
             _ => Ok(None),
         },
+
         _ => Ok(None),
     }
 }

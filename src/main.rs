@@ -42,10 +42,12 @@ fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut address = String::new();
+
     let mut page = Page {
         title: "RIFT-CLI".to_string(),
         elements: Vec::new(),
     };
+
     let mut error_message: Option<String> = None;
     let mut scroll: u16 = 0;
 
@@ -87,6 +89,30 @@ fn run(
                     }
                 }
 
+                InputEvent::ScrollUp => {
+                    scroll = scroll.saturating_sub(1);
+                }
+
+                InputEvent::ScrollDown => {
+                    scroll = scroll.saturating_add(1);
+                }
+
+                InputEvent::PageUp => {
+                    scroll = scroll.saturating_sub(10);
+                }
+
+                InputEvent::PageDown => {
+                    scroll = scroll.saturating_add(10);
+                }
+
+                InputEvent::Home => {
+                    scroll = 0;
+                }
+
+                InputEvent::End => {
+                    scroll = u16::MAX;
+                }
+
                 InputEvent::Escape => {}
             }
         }
@@ -117,7 +143,8 @@ fn run(
                 renderer::render(frame, layout[1], &page, scroll);
             }
 
-            let status = Paragraph::new("Enter: navigate    ↑↓: scroll    Ctrl+Q: quit");
+            let status =
+                Paragraph::new("Enter: navigate    ↑↓: scroll    PgUp/PgDn: page    Ctrl+Q: quit");
 
             frame.render_widget(status, layout[2]);
         })?;
