@@ -7,11 +7,16 @@ pub struct Page {
 
 pub enum PageElement {
     Heading { level: u8, text: String },
-    Paragraph(String),
+    Paragraph(Vec<InlineElement>),
     Link { text: String, url: String },
-    ListItem(String),
+    ListItem(Vec<InlineElement>),
     Text(String),
     Break,
+}
+
+pub enum InlineElement {
+    Text(String),
+    Link { text: String, url: String },
 }
 
 pub fn parse(html: &str) -> Page {
@@ -42,22 +47,18 @@ fn parse_body(body: ElementRef<'_>) -> Vec<PageElement> {
     let mut elements = Vec::new();
 
     for child in body.children() {
-        let Some(element) = ElementRef::wrap(child) else {
-            continue;
-        };
-
-        parse_element(element, &mut elements);
+        if let Some(element) = ElementRef::wrap(child) {
+            parse_element(element, &mut elements);
+        }
     }
 
     elements
 }
 
 fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
-    let tag = element.value().name();
-
-    match tag {
+    match element.value().name() {
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-            let level = tag[1..].parse::<u8>().unwrap_or(1);
+            let level = element.value().name()[1..].parse::<u8>().unwrap_or(1);
             let text = clean_text(&element.text().collect::<String>());
 
             if !text.is_empty() {
@@ -66,10 +67,10 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
         }
 
         "p" => {
-            let text = clean_text(&element.text().collect::<String>());
+            let inline = parse_inline(element);
 
-            if !text.is_empty() {
-                elements.push(PageElement::Paragraph(text));
+            if !inline.is_empty() {
+                elements.push(PageElement::Paragraph(inline));
             }
         }
 
@@ -87,10 +88,10 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
         }
 
         "li" => {
-            let text = clean_text(&element.text().collect::<String>());
+            let inline = parse_inline(element);
 
-            if !text.is_empty() {
-                elements.push(PageElement::ListItem(text));
+            if !inline.is_empty() {
+                elements.push(PageElement::ListItem(inline));
             }
         }
 
@@ -116,6 +117,39 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
     }
 }
 
+fn parse_inline(element: ElementRef<'_>) -> Vec<InlineElement> {
+    let mut elements = Vec::new();
+
+    for child in element.children() {
+        if let Some(child_element) = ElementRef::wrap(child) {
+            match child_element.value().name() {
+                "a" => {
+                    let text = clean_text(&child_element.text().collect::<String>());
+
+                    if let Some(url) = child_element.value().attr("href") {
+                        if !text.is_empty() {
+                            elements.push(InlineElement::Link {
+                                text,
+                                url: url.to_string(),
+                            });
+                        }
+                    }
+                }
+
+                _ => {
+                    let text = clean_text(&child_element.text().collect::<String>());
+
+                    if !text.is_empty() {
+                        elements.push(InlineElement::Text(text));
+                    }
+                }
+            }
+        }
+    }
+
+    elements
+}
+
 fn clean_text(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -129,8 +163,8 @@ pub fn render_text(page: &Page) -> String {
                 output.push_str(&format!("{} {}\n\n", "#".repeat(*level as usize), text));
             }
 
-            PageElement::Paragraph(text) => {
-                output.push_str(text);
+            PageElement::Paragraph(elements) => {
+                render_inline(elements, &mut output);
                 output.push_str("\n\n");
             }
 
@@ -138,8 +172,10 @@ pub fn render_text(page: &Page) -> String {
                 output.push_str(&format!("{text} ({url})\n\n"));
             }
 
-            PageElement::ListItem(text) => {
-                output.push_str(&format!("• {text}\n"));
+            PageElement::ListItem(elements) => {
+                output.push_str("• ");
+                render_inline(elements, &mut output);
+                output.push('\n');
             }
 
             PageElement::Text(text) => {
@@ -154,4 +190,19 @@ pub fn render_text(page: &Page) -> String {
     }
 
     output.trim().to_string()
+}
+
+fn render_inline(elements: &[InlineElement], output: &mut String) {
+    for element in elements {
+        match element {
+            InlineElement::Text(text) => {
+                output.push_str(text);
+                output.push(' ');
+            }
+
+            InlineElement::Link { text, url } => {
+                output.push_str(&format!("{text} ({url}) "));
+            }
+        }
+    }
 }
