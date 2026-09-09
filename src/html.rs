@@ -6,10 +6,20 @@ pub struct Page {
 }
 
 pub enum PageElement {
-    Heading { level: u8, text: String },
+    Heading {
+        level: u8,
+        text: String,
+    },
     Paragraph(Vec<InlineElement>),
-    Link { text: String, url: String },
-    List { ordered: bool, items: Vec<ListItem> },
+    Link {
+        index: usize,
+        text: String,
+        url: String,
+    },
+    List {
+        ordered: bool,
+        items: Vec<ListItem>,
+    },
     Blockquote(String),
     Code(String),
     HorizontalRule,
@@ -23,7 +33,11 @@ pub struct ListItem {
 
 pub enum InlineElement {
     Text(String),
-    Link { text: String, url: String },
+    Link {
+        index: usize,
+        text: String,
+        url: String,
+    },
     Code(String),
 }
 
@@ -53,17 +67,22 @@ pub fn parse(html: &str) -> Page {
 
 fn parse_body(body: ElementRef<'_>) -> Vec<PageElement> {
     let mut elements = Vec::new();
+    let mut next_link_index = 1;
 
     for child in body.children() {
         if let Some(element) = ElementRef::wrap(child) {
-            parse_element(element, &mut elements);
+            parse_element(element, &mut elements, &mut next_link_index);
         }
     }
 
     elements
 }
 
-fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
+fn parse_element(
+    element: ElementRef<'_>,
+    elements: &mut Vec<PageElement>,
+    next_link_index: &mut usize,
+) {
     match element.value().name() {
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
             let level = element.value().name()[1..].parse::<u8>().unwrap_or(1);
@@ -75,7 +94,7 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
         }
 
         "p" => {
-            let inline = parse_inline(element);
+            let inline = parse_inline(element, next_link_index);
 
             if !inline.is_empty() {
                 elements.push(PageElement::Paragraph(inline));
@@ -88,7 +107,11 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
             if let Some(url) = element.value().attr("href")
                 && !text.is_empty()
             {
+                let index = *next_link_index;
+                *next_link_index += 1;
+
                 elements.push(PageElement::Link {
+                    index,
                     text,
                     url: url.to_string(),
                 });
@@ -103,7 +126,7 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
                 if let Some(child_element) = ElementRef::wrap(child)
                     && child_element.value().name() == "li"
                 {
-                    let inline = parse_inline(child_element);
+                    let inline = parse_inline(child_element, next_link_index);
 
                     if !inline.is_empty() {
                         items.push(ListItem { elements: inline });
@@ -117,7 +140,7 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
         }
 
         "li" => {
-            let inline = parse_inline(element);
+            let inline = parse_inline(element, next_link_index);
 
             if !inline.is_empty() {
                 elements.push(PageElement::List {
@@ -154,7 +177,7 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
         "main" | "section" | "article" | "header" | "footer" | "nav" | "div" | "body" => {
             for child in element.children() {
                 if let Some(child_element) = ElementRef::wrap(child) {
-                    parse_element(child_element, elements);
+                    parse_element(child_element, elements, next_link_index);
                 }
             }
         }
@@ -171,7 +194,7 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
     }
 }
 
-fn parse_inline(element: ElementRef<'_>) -> Vec<InlineElement> {
+fn parse_inline(element: ElementRef<'_>, next_link_index: &mut usize) -> Vec<InlineElement> {
     let mut elements = Vec::new();
 
     for child in element.children() {
@@ -196,7 +219,11 @@ fn parse_inline(element: ElementRef<'_>) -> Vec<InlineElement> {
                         if let Some(url) = child_element.value().attr("href")
                             && !text.is_empty()
                         {
+                            let index = *next_link_index;
+                            *next_link_index += 1;
+
                             elements.push(InlineElement::Link {
+                                index,
                                 text,
                                 url: url.to_string(),
                             });

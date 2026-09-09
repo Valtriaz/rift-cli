@@ -109,11 +109,11 @@ fn render_element(element: &PageElement, lines: &mut Vec<Line<'static>>) {
             lines.push(Line::from(""));
         }
 
-        PageElement::Link { text, url } => {
+        PageElement::Link { index, text, url } => {
             lines.push(Line::from(vec![
                 Span::styled("→ ", Style::default().add_modifier(Modifier::BOLD)),
                 Span::styled(
-                    text.clone(),
+                    format!("[{index}] {text}"),
                     Style::default().add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
                 ),
                 Span::raw(format!("  [{url}]")),
@@ -205,9 +205,9 @@ fn render_inline(elements: &[InlineElement]) -> Vec<Line<'static>> {
                 spans.push(Span::raw(text.clone()));
             }
 
-            InlineElement::Link { text, url } => {
+            InlineElement::Link { index, text, url } => {
                 spans.push(Span::styled(
-                    format!("→ {text}"),
+                    format!("[{index}] → {text}"),
                     Style::default().add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
                 ));
 
