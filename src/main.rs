@@ -37,9 +37,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let address = String::new();
+    let mut address = String::new();
 
     loop {
+        if let Some(input) = input::poll()? {
+            match input {
+                InputEvent::Quit => {
+                    break;
+                }
+
+                InputEvent::Character(character) => {
+                    address.push(character);
+                }
+
+                InputEvent::Backspace => {
+                    address.pop();
+                }
+
+                InputEvent::Enter => {}
+
+                InputEvent::Escape => {}
+            }
+        }
+
         terminal.draw(|frame| {
             let area = frame.area();
 
@@ -58,21 +78,12 @@ fn run(
             let content = Paragraph::new("RIFT-CLI")
                 .block(Block::default().borders(Borders::ALL).title(" RIFT "));
 
-            let status = Paragraph::new("q: quit");
+            let status = Paragraph::new("Enter: navigate");
 
             frame.render_widget(address_bar, layout[0]);
             frame.render_widget(content, layout[1]);
             frame.render_widget(status, layout[2]);
         })?;
-
-        if let Some(input) = input::poll()? {
-            match input {
-                InputEvent::Quit => break,
-                InputEvent::Key(key) => {
-                    let _ = key;
-                }
-            }
-        }
     }
 
     Ok(())
