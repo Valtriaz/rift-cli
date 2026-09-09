@@ -1,4 +1,4 @@
-use scraper::{ElementRef, Html, Selector};
+use scraper::{ElementRef, Html, Node, Selector};
 
 pub struct Page {
     pub title: String,
@@ -9,14 +9,22 @@ pub enum PageElement {
     Heading { level: u8, text: String },
     Paragraph(Vec<InlineElement>),
     Link { text: String, url: String },
-    ListItem(Vec<InlineElement>),
+    List { ordered: bool, items: Vec<ListItem> },
+    Blockquote(String),
+    Code(String),
+    HorizontalRule,
     Text(String),
     Break,
+}
+
+pub struct ListItem {
+    pub elements: Vec<InlineElement>,
 }
 
 pub enum InlineElement {
     Text(String),
     Link { text: String, url: String },
+    Code(String),
 }
 
 pub fn parse(html: &str) -> Page {
@@ -77,13 +85,34 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
         "a" => {
             let text = clean_text(&element.text().collect::<String>());
 
-            if let Some(url) = element.value().attr("href") {
-                if !text.is_empty() {
-                    elements.push(PageElement::Link {
-                        text,
-                        url: url.to_string(),
-                    });
+            if let Some(url) = element.value().attr("href")
+                && !text.is_empty()
+            {
+                elements.push(PageElement::Link {
+                    text,
+                    url: url.to_string(),
+                });
+            }
+        }
+
+        "ul" | "ol" => {
+            let ordered = element.value().name() == "ol";
+            let mut items = Vec::new();
+
+            for child in element.children() {
+                if let Some(child_element) = ElementRef::wrap(child)
+                    && child_element.value().name() == "li"
+                {
+                    let inline = parse_inline(child_element);
+
+                    if !inline.is_empty() {
+                        items.push(ListItem { elements: inline });
+                    }
                 }
+            }
+
+            if !items.is_empty() {
+                elements.push(PageElement::List { ordered, items });
             }
         }
 
@@ -91,21 +120,46 @@ fn parse_element(element: ElementRef<'_>, elements: &mut Vec<PageElement>) {
             let inline = parse_inline(element);
 
             if !inline.is_empty() {
-                elements.push(PageElement::ListItem(inline));
+                elements.push(PageElement::List {
+                    ordered: false,
+                    items: vec![ListItem { elements: inline }],
+                });
             }
+        }
+
+        "blockquote" => {
+            let text = clean_text(&element.text().collect::<String>());
+
+            if !text.is_empty() {
+                elements.push(PageElement::Blockquote(text));
+            }
+        }
+
+        "pre" => {
+            let text = element.text().collect::<String>();
+
+            if !text.is_empty() {
+                elements.push(PageElement::Code(text.trim_end().to_string()));
+            }
+        }
+
+        "hr" => {
+            elements.push(PageElement::HorizontalRule);
         }
 
         "br" => {
             elements.push(PageElement::Break);
         }
 
-        "ul" | "ol" | "main" | "section" | "article" | "header" | "footer" | "nav" | "div" => {
+        "main" | "section" | "article" | "header" | "footer" | "nav" | "div" | "body" => {
             for child in element.children() {
                 if let Some(child_element) = ElementRef::wrap(child) {
                     parse_element(child_element, elements);
                 }
             }
         }
+
+        "script" | "style" | "noscript" | "template" => {}
 
         _ => {
             let text = clean_text(&element.text().collect::<String>());
@@ -121,29 +175,57 @@ fn parse_inline(element: ElementRef<'_>) -> Vec<InlineElement> {
     let mut elements = Vec::new();
 
     for child in element.children() {
-        if let Some(child_element) = ElementRef::wrap(child) {
-            match child_element.value().name() {
-                "a" => {
-                    let text = clean_text(&child_element.text().collect::<String>());
+        match child.value() {
+            Node::Text(text) => {
+                let text = clean_text(text);
 
-                    if let Some(url) = child_element.value().attr("href") {
-                        if !text.is_empty() {
+                if !text.is_empty() {
+                    elements.push(InlineElement::Text(text));
+                }
+            }
+
+            Node::Element(_) => {
+                let Some(child_element) = ElementRef::wrap(child) else {
+                    continue;
+                };
+
+                match child_element.value().name() {
+                    "a" => {
+                        let text = clean_text(&child_element.text().collect::<String>());
+
+                        if let Some(url) = child_element.value().attr("href")
+                            && !text.is_empty()
+                        {
                             elements.push(InlineElement::Link {
                                 text,
                                 url: url.to_string(),
                             });
                         }
                     }
-                }
 
-                _ => {
-                    let text = clean_text(&child_element.text().collect::<String>());
+                    "code" => {
+                        let text = child_element.text().collect::<String>();
 
-                    if !text.is_empty() {
-                        elements.push(InlineElement::Text(text));
+                        if !text.is_empty() {
+                            elements.push(InlineElement::Code(text));
+                        }
+                    }
+
+                    "br" => {
+                        elements.push(InlineElement::Text("\n".to_string()));
+                    }
+
+                    _ => {
+                        let text = clean_text(&child_element.text().collect::<String>());
+
+                        if !text.is_empty() {
+                            elements.push(InlineElement::Text(text));
+                        }
                     }
                 }
             }
+
+            _ => {}
         }
     }
 
@@ -172,10 +254,38 @@ pub fn render_text(page: &Page) -> String {
                 output.push_str(&format!("{text} ({url})\n\n"));
             }
 
-            PageElement::ListItem(elements) => {
-                output.push_str("• ");
-                render_inline(elements, &mut output);
+            PageElement::List { ordered, items } => {
+                for (index, item) in items.iter().enumerate() {
+                    if *ordered {
+                        output.push_str(&format!("{}. ", index + 1));
+                    } else {
+                        output.push_str("• ");
+                    }
+
+                    render_inline(&item.elements, &mut output);
+                    output.push('\n');
+                }
+
                 output.push('\n');
+            }
+
+            PageElement::Blockquote(text) => {
+                for line in text.lines() {
+                    output.push_str(&format!("│ {line}\n"));
+                }
+
+                output.push('\n');
+            }
+
+            PageElement::Code(text) => {
+                output.push_str("┌─ Code ──────────────────────────────────────\n");
+                output.push_str(text);
+                output.push('\n');
+                output.push_str("└─────────────────────────────────────────────\n\n");
+            }
+
+            PageElement::HorizontalRule => {
+                output.push_str("──────────────────────────────────────────────\n\n");
             }
 
             PageElement::Text(text) => {
@@ -193,15 +303,24 @@ pub fn render_text(page: &Page) -> String {
 }
 
 fn render_inline(elements: &[InlineElement], output: &mut String) {
-    for element in elements {
+    for (index, element) in elements.iter().enumerate() {
+        if index > 0 {
+            output.push(' ');
+        }
+
         match element {
             InlineElement::Text(text) => {
                 output.push_str(text);
-                output.push(' ');
             }
 
             InlineElement::Link { text, url } => {
-                output.push_str(&format!("{text} ({url}) "));
+                output.push_str(&format!("→ {text} ({url})"));
+            }
+
+            InlineElement::Code(text) => {
+                output.push('`');
+                output.push_str(text);
+                output.push('`');
             }
         }
     }
