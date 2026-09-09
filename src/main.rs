@@ -1,7 +1,8 @@
+mod input;
+
 use std::io;
 
 use crossterm::{
-    event::{self, Event, KeyCode},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -11,6 +12,8 @@ use ratatui::{
     backend::CrosstermBackend,
     widgets::{Block, Borders, Paragraph},
 };
+
+use input::InputEvent;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     enable_raw_mode()?;
@@ -43,10 +46,11 @@ fn run(
             frame.render_widget(paragraph, area);
         })?;
 
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('q') {
-                    break;
+        if let Some(input) = input::poll()? {
+            match input {
+                InputEvent::Quit => break,
+                InputEvent::Key(key) => {
+                    let _ = key;
                 }
             }
         }
