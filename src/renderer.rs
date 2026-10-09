@@ -38,6 +38,45 @@ pub fn max_scroll(page: &Page, area: Rect) -> u16 {
     max_scroll_for_lines(&lines, area)
 }
 
+pub fn scroll_to_link(page: &Page, link_index: usize, area: Rect, current_scroll: u16) -> u16 {
+    let content_width = area.width.saturating_sub(2) as usize;
+    let content_height = area.height.saturating_sub(2) as usize;
+    if content_width == 0 || content_height == 0 {
+        return current_scroll;
+    }
+
+    let lines = build_lines(page, Some(link_index));
+    let mut target_row: Option<usize> = None;
+    let mut current_row = 0;
+
+    for line in &lines {
+        let is_target = line
+            .spans
+            .iter()
+            .any(|span| span.content.starts_with(&format!("[{link_index}] →")));
+
+        if is_target && target_row.is_none() {
+            target_row = Some(current_row);
+        }
+
+        current_row += wrapped_line_height(line, content_width);
+    }
+
+    if let Some(row) = target_row {
+        let max = max_scroll_for_lines(&lines, area);
+        let current = current_scroll as usize;
+        if row < current {
+            (row as u16).min(max)
+        } else if row >= current + content_height {
+            ((row + 1).saturating_sub(content_height) as u16).min(max)
+        } else {
+            current_scroll.min(max)
+        }
+    } else {
+        current_scroll
+    }
+}
+
 fn max_scroll_for_lines(lines: &[Line<'static>], area: Rect) -> u16 {
     let content_width = area.width.saturating_sub(2) as usize;
     let content_height = area.height.saturating_sub(2) as usize;
