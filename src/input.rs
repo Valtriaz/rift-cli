@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 
 pub enum InputEvent {
     Quit,
@@ -16,7 +16,6 @@ pub enum InputEvent {
     End,
     NextLink,
     PreviousLink,
-    ToggleJs,
 }
 
 pub fn poll() -> Result<Option<InputEvent>, Box<dyn std::error::Error>> {
@@ -25,13 +24,9 @@ pub fn poll() -> Result<Option<InputEvent>, Box<dyn std::error::Error>> {
     }
 
     match event::read()? {
-        Event::Key(key_event) if key_event.kind == KeyEventKind::Press => match key_event.code {
+        Event::Key(key_event) => match key_event.code {
             KeyCode::Char('q') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 Ok(Some(InputEvent::Quit))
-            }
-
-            KeyCode::Char('j') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                Ok(Some(InputEvent::ToggleJs))
             }
 
             KeyCode::Tab if key_event.modifiers.contains(KeyModifiers::SHIFT) => {

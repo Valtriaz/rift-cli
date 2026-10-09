@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
-use crate::html::{ContainerKind, InlineElement, Page, PageElement};
+use crate::html::{InlineElement, Page, PageElement};
 
 pub fn render(
     frame: &mut Frame<'_>,
@@ -77,23 +77,6 @@ fn build_lines(page: &Page, selected_link: Option<usize>) -> Vec<Line<'static>> 
 
     for element in &page.elements {
         render_element(element, &mut lines, selected_link);
-    }
-
-    if lines.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled(
-                "  ℹ  No readable text content found on this page.",
-                Style::default().add_modifier(Modifier::DIM),
-            ),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled(
-                "     This page may require client-side JavaScript to render its interface.",
-                Style::default().add_modifier(Modifier::DIM),
-            ),
-        ]));
-        lines.push(Line::from(""));
     }
 
     lines
@@ -208,96 +191,6 @@ fn render_element(
         PageElement::Break => {
             lines.push(Line::from(""));
         }
-
-        PageElement::Button { text } => {
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!(" [ ➔ {text} ] "),
-                    Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD),
-                ),
-            ]));
-            lines.push(Line::from(""));
-        }
-
-        PageElement::Container(container) => {
-            let mut inner_lines = Vec::new();
-            for child in &container.elements {
-                render_element(child, &mut inner_lines, selected_link);
-            }
-
-            while inner_lines
-                .last()
-                .map(|l| l.spans.is_empty() || l.spans.iter().all(|s| s.content.trim().is_empty()))
-                .unwrap_or(false)
-            {
-                inner_lines.pop();
-            }
-
-            if inner_lines.is_empty() {
-                return;
-            }
-
-            match container.kind {
-                ContainerKind::Header => {
-                    let border_style = Style::default().add_modifier(Modifier::BOLD);
-                    let title = container.title.as_deref().unwrap_or("Navigation");
-                    lines.push(Line::from(vec![
-                        Span::styled(format!("╔══ ⚡ {title} ══════════════════════════════════════════════════"), border_style),
-                    ]));
-                    for line in inner_lines {
-                        let mut spans = vec![Span::styled("║ ", border_style)];
-                        spans.extend(line.spans);
-                        lines.push(Line::from(spans));
-                    }
-                    lines.push(Line::from(vec![
-                        Span::styled("╚══════════════════════════════════════════════════════════════════", border_style),
-                    ]));
-                    lines.push(Line::from(""));
-                }
-                ContainerKind::Card => {
-                    let border_style = Style::default().add_modifier(Modifier::BOLD);
-                    let header_line = match &container.title {
-                        Some(title) => format!("┌─ {title} ──────────────────────────────────────────────────"),
-                        None => "┌─────────────────────────────────────────────────────────────────".to_string(),
-                    };
-                    lines.push(Line::from(vec![Span::styled(header_line, border_style)]));
-                    for line in inner_lines {
-                        let mut spans = vec![Span::styled("│ ", border_style)];
-                        spans.extend(line.spans);
-                        lines.push(Line::from(spans));
-                    }
-                    lines.push(Line::from(vec![
-                        Span::styled("└─────────────────────────────────────────────────────────────────", border_style),
-                    ]));
-                    lines.push(Line::from(""));
-                }
-                ContainerKind::Sidebar => {
-                    let border_style = Style::default().add_modifier(Modifier::BOLD);
-                    let title = container.title.as_deref().unwrap_or("Sidebar");
-                    lines.push(Line::from(vec![
-                        Span::styled(format!("┃ ▸ {title} ─────────────────────────────────────────────"), border_style),
-                    ]));
-                    for line in inner_lines {
-                        let mut spans = vec![Span::styled("┃ ", border_style)];
-                        spans.extend(line.spans);
-                        lines.push(Line::from(spans));
-                    }
-                    lines.push(Line::from(vec![
-                        Span::styled("┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", border_style),
-                    ]));
-                    lines.push(Line::from(""));
-                }
-                ContainerKind::Footer => {
-                    lines.push(Line::from("─────────────────────────────────────────────────────────────────"));
-                    for line in inner_lines {
-                        let mut spans = vec![Span::raw("© ")];
-                        spans.extend(line.spans);
-                        lines.push(Line::from(spans));
-                    }
-                    lines.push(Line::from(""));
-                }
-            }
-        }
     }
 }
 
@@ -322,13 +215,6 @@ fn render_inline(elements: &[InlineElement], selected_link: Option<usize>) -> Ve
                 spans.push(Span::styled(
                     format!("`{text}`"),
                     Style::default().add_modifier(Modifier::BOLD),
-                ));
-            }
-
-            InlineElement::Button { text } => {
-                spans.push(Span::styled(
-                    format!(" [ ➔ {text} ] "),
-                    Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD),
                 ));
             }
         }
@@ -356,84 +242,3 @@ fn render_link(
         Span::raw(format!(" [{url}]")),
     ]
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::html::{Container, ContainerKind, Page, PageElement};
-
-    #[test]
-    fn test_render_card_container() {
-        let page = Page {
-            title: "Test".to_string(),
-            elements: vec![PageElement::Container(Container {
-                kind: ContainerKind::Card,
-                title: Some("Card Title".to_string()),
-                elements: vec![PageElement::Text("Card Body".to_string())],
-            })],
-        };
-
-        let lines = build_lines(&page, None);
-        let rendered: Vec<String> = lines.iter().map(|l| {
-            l.spans.iter().map(|s| s.content.to_string()).collect::<String>()
-        }).collect();
-
-        assert!(rendered[0].starts_with("┌─ Card Title"));
-        assert!(rendered[1].starts_with("│ Card Body"));
-        assert!(rendered[2].starts_with("└─"));
-    }
-
-    #[test]
-    fn test_render_header_container() {
-        let page = Page {
-            title: "Test".to_string(),
-            elements: vec![PageElement::Container(Container {
-                kind: ContainerKind::Header,
-                title: Some("Navbar".to_string()),
-                elements: vec![PageElement::Text("Home".to_string())],
-            })],
-        };
-
-        let lines = build_lines(&page, None);
-        let rendered: Vec<String> = lines.iter().map(|l| {
-            l.spans.iter().map(|s| s.content.to_string()).collect::<String>()
-        }).collect();
-
-        assert!(rendered[0].contains("╔══ ⚡ Navbar"));
-        assert!(rendered[1].starts_with("║ Home"));
-        assert!(rendered[2].starts_with("╚══"));
-    }
-
-    #[test]
-    fn test_render_button() {
-        let page = Page {
-            title: "Test".to_string(),
-            elements: vec![PageElement::Button {
-                text: "Click Me".to_string(),
-            }],
-        };
-
-        let lines = build_lines(&page, None);
-        let rendered: Vec<String> = lines.iter().map(|l| {
-            l.spans.iter().map(|s| s.content.to_string()).collect::<String>()
-        }).collect();
-
-        assert!(rendered[0].contains("[ ➔ Click Me ]"));
-    }
-
-    #[test]
-    fn test_render_empty_page() {
-        let page = Page {
-            title: "Empty".to_string(),
-            elements: vec![],
-        };
-
-        let lines = build_lines(&page, None);
-        let rendered: Vec<String> = lines.iter().map(|l| {
-            l.spans.iter().map(|s| s.content.to_string()).collect::<String>()
-        }).collect();
-
-        assert!(rendered.iter().any(|line| line.contains("No readable text content")));
-    }
-}
-
