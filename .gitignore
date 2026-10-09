@@ -21,3 +21,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Internal notes & progress tracking
+PROJECT_PROGRESS.md
